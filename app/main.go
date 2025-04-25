@@ -70,14 +70,26 @@ func (h *AppHandler) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		var recipe RecipePostRequest
-		err := json.NewDecoder(r.Body).Decode(&recipe)
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		err := decoder.Decode(&recipe)
 		if err != nil {
 			parseError()
 			return
 		}
+		result, err := h.DB.Exec("INSERT INTO recipes (title, making_time, serves, ingredients, cost) VALUES (?, ?, ?, ?, ?)",
+			recipe.Title, recipe.MakingTime, recipe.Serves, recipe.Ingredients, recipe.Cost)
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
+		id, err := result.LastInsertId()
+		if err != nil {
+			http.Error(w, err.Error(), http.StatusInternalServerError)
+			return
+		}
 		var insertedRow RecipeRow
-		err = h.DB.QueryRow("INSERT INTO recipes (title, making_time, serves, ingredients, cost) VALUES (?, ?, ?, ?, ?) RETURNING *",
-			recipe.Title, recipe.MakingTime, recipe.Serves, recipe.Ingredients, recipe.Cost).Scan(
+		err = h.DB.QueryRow("SELECT id, title, making_time, serves, ingredients, cost, created_at, updated_at FROM recipes WHERE id = ?", id).Scan(
 			&insertedRow.ID,
 			&insertedRow.Title,
 			&insertedRow.MakingTime,
@@ -123,11 +135,13 @@ func (h *AppHandler) handleRecipesWithId(w http.ResponseWriter, r *http.Request)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(RecipeGetResponse{
 			Message: "Recipe details by id",
-			Recipe:  recipe,
+			Recipe:  []RecipeRowWOTimestamp{recipe},
 		})
 	case http.MethodPatch:
 		var recipe RecipePatchRequest
-		err := json.NewDecoder(r.Body).Decode(&recipe)
+		decoder := json.NewDecoder(r.Body)
+		decoder.DisallowUnknownFields()
+		err := decoder.Decode(&recipe)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
@@ -175,7 +189,7 @@ type RecipeRow struct {
 	MakingTime  string `json:"making_time"`
 	Serves      string `json:"serves"`
 	Ingredients string `json:"ingredients"`
-	Cost        int `json:"cost"`
+	Cost        int    `json:"cost"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }
@@ -186,7 +200,7 @@ type RecipeRowWOTimestamp struct {
 	MakingTime  string `json:"making_time"`
 	Serves      string `json:"serves"`
 	Ingredients string `json:"ingredients"`
-	Cost        int `json:"cost"`
+	Cost        int    `json:"cost"`
 }
 
 type RecipePostRequest struct {
@@ -194,7 +208,7 @@ type RecipePostRequest struct {
 	MakingTime  string `json:"making_time"`
 	Serves      string `json:"serves"`
 	Ingredients string `json:"ingredients"`
-	Cost        int `json:"cost"`
+	Cost        int    `json:"cost"`
 }
 
 type RecipePostOkResponse struct {
@@ -212,8 +226,8 @@ type RecipeListGetResponse struct {
 }
 
 type RecipeGetResponse struct {
-	Message string               `json:"message"`
-	Recipe  RecipeRowWOTimestamp `json:"recipe"`
+	Message string                 `json:"message"`
+	Recipe  []RecipeRowWOTimestamp `json:"recipe"`
 }
 
 type RecipePatchRequest struct {
@@ -221,7 +235,7 @@ type RecipePatchRequest struct {
 	MakingTime  string `json:"making_time"`
 	Serves      string `json:"serves"`
 	Ingredients string `json:"ingredients"`
-	Cost        int `json:"cost"`
+	Cost        int    `json:"cost"`
 }
 
 type RecipePatchOkResponse struct {
