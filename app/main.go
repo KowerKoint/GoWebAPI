@@ -56,9 +56,7 @@ func (h *AppHandler) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		var recipes []RecipeRowWOTimestamp
 		for rows.Next() {
 			var recipe RecipeRowWOTimestamp
-			var costInt int
-			_ = rows.Scan(&recipe.ID, &recipe.Title, &recipe.MakingTime, &recipe.Serves, &recipe.Ingredients, &costInt)
-			recipe.Cost = strconv.Itoa(costInt)
+			_ = rows.Scan(&recipe.ID, &recipe.Title, &recipe.MakingTime, &recipe.Serves, &recipe.Ingredients, &recipe.Cost)
 			recipes = append(recipes, recipe)
 		}
 		w.Header().Set("Content-Type", "application/json")
@@ -77,21 +75,15 @@ func (h *AppHandler) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			parseError()
 			return
 		}
-		costInt, err := strconv.Atoi(recipe.Cost)
-		if err != nil {
-			parseError()
-			return
-		}
 		var insertedRow RecipeRow
-		var insertedCostInt int
 		err = h.DB.QueryRow("INSERT INTO recipes (title, making_time, serves, ingredients, cost) VALUES (?, ?, ?, ?, ?) RETURNING *",
-			recipe.Title, recipe.MakingTime, recipe.Serves, recipe.Ingredients, costInt).Scan(
+			recipe.Title, recipe.MakingTime, recipe.Serves, recipe.Ingredients, recipe.Cost).Scan(
 			&insertedRow.ID,
 			&insertedRow.Title,
 			&insertedRow.MakingTime,
 			&insertedRow.Serves,
 			&insertedRow.Ingredients,
-			&insertedCostInt,
+			&insertedRow.Cost,
 			&insertedRow.CreatedAt,
 			&insertedRow.UpdatedAt,
 		)
@@ -99,7 +91,6 @@ func (h *AppHandler) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
 		}
-		insertedRow.Cost = strconv.Itoa(insertedCostInt)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(RecipePostOkResponse{
 			Message: "Recipe successfully created!",
@@ -113,14 +104,13 @@ func (h *AppHandler) handleRecipesWithId(w http.ResponseWriter, r *http.Request)
 	switch r.Method {
 	case http.MethodGet:
 		var recipe RecipeRowWOTimestamp
-		var costInt int
 		err := h.DB.QueryRow("SELECT id, title, making_time, serves, ingredients, cost FROM recipes WHERE id = ?", id).Scan(
 			&recipe.ID,
 			&recipe.Title,
 			&recipe.MakingTime,
 			&recipe.Serves,
 			&recipe.Ingredients,
-			&costInt,
+			&recipe.Cost,
 		)
 		if err != nil {
 			if err == sql.ErrNoRows {
@@ -130,7 +120,6 @@ func (h *AppHandler) handleRecipesWithId(w http.ResponseWriter, r *http.Request)
 			}
 			return
 		}
-		recipe.Cost = strconv.Itoa(costInt)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(RecipeGetResponse{
 			Message: "Recipe details by id",
@@ -143,13 +132,8 @@ func (h *AppHandler) handleRecipesWithId(w http.ResponseWriter, r *http.Request)
 			http.Error(w, err.Error(), http.StatusBadRequest)
 			return
 		}
-		costInt, err := strconv.Atoi(recipe.Cost)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
-			return
-		}
 		_, err = h.DB.Exec("UPDATE recipes SET title = ?, making_time = ?, serves = ?, ingredients = ?, cost = ? WHERE id = ?",
-			recipe.Title, recipe.MakingTime, recipe.Serves, recipe.Ingredients, costInt, id)
+			recipe.Title, recipe.MakingTime, recipe.Serves, recipe.Ingredients, recipe.Cost, id)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusInternalServerError)
 			return
@@ -191,7 +175,7 @@ type RecipeRow struct {
 	MakingTime  string `json:"making_time"`
 	Serves      string `json:"serves"`
 	Ingredients string `json:"ingredients"`
-	Cost        string `json:"cost"`
+	Cost        int `json:"cost"`
 	CreatedAt   string `json:"created_at"`
 	UpdatedAt   string `json:"updated_at"`
 }
@@ -202,7 +186,7 @@ type RecipeRowWOTimestamp struct {
 	MakingTime  string `json:"making_time"`
 	Serves      string `json:"serves"`
 	Ingredients string `json:"ingredients"`
-	Cost        string `json:"cost"`
+	Cost        int `json:"cost"`
 }
 
 type RecipePostRequest struct {
@@ -210,7 +194,7 @@ type RecipePostRequest struct {
 	MakingTime  string `json:"making_time"`
 	Serves      string `json:"serves"`
 	Ingredients string `json:"ingredients"`
-	Cost        string `json:"cost"`
+	Cost        int `json:"cost"`
 }
 
 type RecipePostOkResponse struct {
@@ -237,7 +221,7 @@ type RecipePatchRequest struct {
 	MakingTime  string `json:"making_time"`
 	Serves      string `json:"serves"`
 	Ingredients string `json:"ingredients"`
-	Cost        string `json:"cost"`
+	Cost        int `json:"cost"`
 }
 
 type RecipePatchOkResponse struct {
