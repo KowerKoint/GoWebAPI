@@ -17,6 +17,8 @@ services:
       - DB_USER=user
       - DB_PASSWORD=password
       - DB_NAME=recipes
+    networks:
+      - app-network
   db:
     image: mysql:latest
     container_name: db
@@ -32,6 +34,10 @@ services:
     ports:
       - "3306:3306"
     restart: unless-stopped
-
+    networks:
+      - app-network
 volumes:
   mysql_data:
+networks:
+  app-network:
+    driver: bridge
