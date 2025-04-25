@@ -70,10 +70,12 @@ func (h *AppHandler) handleRecipes(w http.ResponseWriter, r *http.Request) {
 			})
 		}
 		var recipe RecipePostRequest
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		err := decoder.Decode(&recipe)
+		err := json.NewDecoder(r.Body).Decode(&recipe)
 		if err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if !validatePostFields(recipe) {
 			parseError()
 			return
 		}
@@ -106,7 +108,7 @@ func (h *AppHandler) handleRecipes(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(RecipePostOkResponse{
 			Message: "Recipe successfully created!",
-			Recipe:  insertedRow,
+			Recipe:  []RecipeRow{insertedRow},
 		})
 	}
 }
@@ -139,11 +141,17 @@ func (h *AppHandler) handleRecipesWithId(w http.ResponseWriter, r *http.Request)
 		})
 	case http.MethodPatch:
 		var recipe RecipePatchRequest
-		decoder := json.NewDecoder(r.Body)
-		decoder.DisallowUnknownFields()
-		err := decoder.Decode(&recipe)
+		err := json.NewDecoder(r.Body).Decode(&recipe)
 		if err != nil {
 			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+		if !validatePatchFields(recipe) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(RecipePostFailureResponse{
+				Message:  "Recipe update failed!",
+				Required: "title, making_time, serves, ingredients, cost",
+			})
 			return
 		}
 		_, err = h.DB.Exec("UPDATE recipes SET title = ?, making_time = ?, serves = ?, ingredients = ?, cost = ? WHERE id = ?",
@@ -155,7 +163,7 @@ func (h *AppHandler) handleRecipesWithId(w http.ResponseWriter, r *http.Request)
 		w.Header().Set("Content-Type", "application/json")
 		json.NewEncoder(w).Encode(RecipePatchOkResponse{
 			Message: "Recipe successfully updated!",
-			Recipe:  recipe,
+			Recipe:  []RecipePatchRequest{recipe},
 		})
 	case http.MethodDelete:
 		var count int
@@ -181,6 +189,20 @@ func (h *AppHandler) handleRecipesWithId(w http.ResponseWriter, r *http.Request)
 			Message: "Recipe successfully removed!",
 		})
 	}
+}
+
+func validatePostFields(recipe RecipePostRequest) bool {
+	if recipe.Title == "" || recipe.MakingTime == "" || recipe.Serves == "" || recipe.Ingredients == "" || recipe.Cost <= 0 {
+		return false
+	}
+	return true
+}
+
+func validatePatchFields(recipe RecipePatchRequest) bool {
+	if recipe.Title == "" || recipe.MakingTime == "" || recipe.Serves == "" || recipe.Ingredients == "" || recipe.Cost <= 0 {
+		return false
+	}
+	return true
 }
 
 type RecipeRow struct {
@@ -212,8 +234,8 @@ type RecipePostRequest struct {
 }
 
 type RecipePostOkResponse struct {
-	Message string    `json:"message"`
-	Recipe  RecipeRow `json:"recipe"`
+	Message string      `json:"message"`
+	Recipe  []RecipeRow `json:"recipe"`
 }
 
 type RecipePostFailureResponse struct {
@@ -239,8 +261,8 @@ type RecipePatchRequest struct {
 }
 
 type RecipePatchOkResponse struct {
-	Message string             `json:"message"`
-	Recipe  RecipePatchRequest `json:"recipe"`
+	Message string               `json:"message"`
+	Recipe  []RecipePatchRequest `json:"recipe"`
 }
 
 type RecipeDeleteOkResponse struct {
